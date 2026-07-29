@@ -50,17 +50,48 @@ The logical model refines the conceptual design by defining attributes, keys, an
 
 ---
 
-### Entity Relationship Diagram (ERD)
+### Entities and Relationships
 
-The ERD represents the physical database implementation and illustrates the tables, primary keys, foreign keys and relationships used throughout the application.
+This section provides an overview of the physical database implementation and illustrates the tables, primary keys, foreign keys and relationships used throughout the application.
 
 #### Entities
 
-![ER Diagram_entities](images/erd_ent.png)
+| **Entity** | **Attribute** | **Description** |
+|-------------|---------------|-----------------|
+| **Locations** | Name | Name of the location. |
+| | Description | Description of the location. |
+| | Dark | Indicates whether the location is dark. |
+| | Connection | Locations that can be reached from the current location. |
+| **Players** | Username | Unique username for each player. |
+| | Current Location | The player's current location. |
+| | Last Action Time | The most recent time the player performed an action. |
+| **Items** | Name | Name of the item. |
+| | Description | Description of the item. |
+| | Can Pickup | Indicates whether the item can be collected. |
+| | Location | The location where the item is placed. |
+| **Action Log** | Player Name | Player associated with the logged event. |
+| | Location Name | Location where the event occurred. |
+| | Time | Timestamp of the logged event. |
+| | Action | Type of action performed. |
+| | Details | Additional information about the event. |
+| **Inventory** | Player Name | Player associated with the inventory record. |
+| | Item Name | Item contained in the player's inventory. |
+| | Quantity | Number of that item in the player's inventory. |
 
 #### Relationships
 
-![ER_Diagram_relationships](images/erd_rel.png)
+| **Relationship** | **From Entity** | **Relationship** | **Min** | **Max** | **To Entity** |
+|------------------|-----------------|------------------|:-------:|:-------:|---------------|
+| Player → Inventory | Player | has | 1 | 1 | Inventory |
+| Inventory → Player | Inventory | belongs to | 1 | 1 | Player |
+| Player → Action Log | Player | logs | 0 | Many | Action Log |
+| Action Log → Player | Action Log | logged by | 0 | Many | Player |
+| Player → Location | Player | occupies | 1 | 1 | Location |
+| Location → Player | Location | occupied by | 0 | Many | Player |
+| Inventory → Item | Inventory | contains | 0 | Many | Item |
+| Item → Inventory | Item | contained in | 0 | Many | Inventory |
+| Item → Location | Item | located in | 1 | 1 | Location |
+| Location → Item | Location | contains | 0 | Many | Item |
 
 ---
 
