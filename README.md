@@ -8,6 +8,28 @@
 
 Starship Command is a database design project developed to demonstrate the complete lifecycle of relational database development, from conceptual modeling through physical implementation.  The project explores how a relational database can be used to represent and manage the state of an interactive game world, including locations, player progression, inventory, and gameplay rules.
 
+Version 2.0 ports the game engine from SQL Server to PostgreSQL and adds a browser-based terminal UI, so the game can be played with a single `docker compose up`.
+
+---
+
+## Quick Start
+
+Requires [Docker](https://www.docker.com/products/docker-desktop/).
+
+```bash
+docker compose up --build
+```
+
+Open **http://localhost:8080**, enter a callsign and type `help`.
+
+To wipe all players and rebuild the database from the scripts in `db/init`:
+
+```bash
+docker compose down -v && docker compose up --build
+```
+
+Ports can be changed with `WEB_PORT` and `DB_PORT` (for example, `WEB_PORT=9000 docker compose up`).
+
 ---
 
 ## Project Objectives
@@ -138,7 +160,7 @@ This audit history supports debugging, gameplay analysis and future enhancements
 
 ## Database Schema Creation
 
-The database build script defines the physical schema required to support gameplay.  The implementation includes seven tables and sixteen constraints that establish the required relationships and enforce data integrity.
+The database build scripts define the physical schema required to support gameplay.  The implementation includes seven tables with primary key, foreign key, unique and check constraints that establish the required relationships and enforce data integrity.
 
 Key database elements include:
 
@@ -165,17 +187,40 @@ The design is intentionally scalable.  Expanding the game world requires only ad
 
 ## CRUD Operations and Stored Procedures
 
-Five stored procedures implement the primary gameplay actions by performing database operations required for player interaction.  Each procedure manages a specific game function while maintaining database integrity.
+Stored procedures implement the primary gameplay actions by performing database operations required for player interaction.  Each procedure manages a specific game function while maintaining database integrity.
 
 Examples of supported actions include:
 
+* Creating or resuming a player
 * Moving between locations
 * Looking around an area
 * Collecting items
 * Updating player state
 * Recording gameplay events
 
-For example, `usp_movePlayer` accepts a player ID and movement direction, validates the requested action and updates the player's current location within the game map.
+For example, `usp_move_player` accepts a player ID and movement direction, validates the requested action and updates the player's current location within the game map.
+
+In v2.0 every gameplay function returns a single JSON document instead of `PRINT` messages and multiple result sets, so any client (psql, the web UI, a test script) can drive the game the same way:
+
+```json
+{
+  "ok": true,
+  "message": "You head east to Nav Ping (East).",
+  "state": { "player": {}, "location": {}, "items": [], "exits": [], "inventory": [], "mission": {} }
+}
+```
+
+| Function | Purpose |
+|---|---|
+| `usp_create_player(username)` | Create a player at the Crash Site, or resume an existing one |
+| `usp_look_around(player_id)` | Describe the location, its items and exits |
+| `usp_move_player(player_id, direction)` | Move along a valid connection |
+| `usp_pick_up_item(player_id, item_id)` | Collect an item at the current location |
+| `usp_show_inventory(player_id)` | List collected items |
+| `usp_complete_game(player_id)` | Relaunch the ship, or get hints for missing components |
+| `usp_restart_game(player_id)` | Empty the inventory and return to the Crash Site |
+| `fn_game_state(player_id)` | Read-only snapshot of a player's game |
+| `fn_action_log(player_id, limit)` | Recent action log entries |
 
 ---
 
@@ -203,98 +248,133 @@ Together, these triggers centralize validation logic, improve maintainability, a
 
 ---
 
+## v2.0: PostgreSQL and Web Interface
+
+The original SQL Server implementation (in `sql/`) was played by running stored procedures by hand in SSMS.  Version 2.0 keeps the database as the game engine and adds a thin web layer on top:
+
+```text
+Browser (terminal UI)  ──HTTP/JSON──▶  Flask API  ──SELECT usp_*()──▶  PostgreSQL
+  app/static/game.js                   app/app.py                       db/init/*.sql
+                                                                        tables, functions,
+                                                                        triggers = game rules
+```
+
+The Flask app contains no game logic.  Each route calls one database function and returns its JSON unchanged, so every rule is still enforced by the database.
+
+Changes from the v1.0 design:
+
+* **Per-player worlds.** v1.0 deleted an item from `location_items` when it was picked up, so only the first player could ever find it.  Item placement is now static world data, and a player's `inventory` decides whether an item is still visible to them.
+* **Data-driven win condition.** `items.is_required` and `items.hint` replace the hard-coded item IDs in `usp_complete_game`, and `locations.is_start` replaces looking up the Crash Site by name.
+* **Persistent progress.** `players.completed_at` records a finished mission; `usp_create_player` and `usp_restart_game` support new and returning players.
+* **Stronger constraints.** Unique location and item names, case-insensitive unique usernames, one connection per direction from each location, and a foreign key on `action_log.action_location`.
+* **Triggers ported.** `trg_inventory_validate` now runs `BEFORE` the write, correcting the row up front instead of rolling back afterwards.
+
+---
+
 ## Repository Structure
 
 ```text
-sql/
-├── 01_build_database.sql
-└── 02_gameplay.sql
-
-docs/
-├── conceptual_model.png
-├── logical_data_model.png
-├── erd_ent.png
-├── erd_rel.png
-└── game_map.png
+docker-compose.yml          # PostgreSQL + web app
+db/
+├── init/                   # run automatically on first database start
+│   ├── 01_schema.sql       # tables and constraints
+│   ├── 02_seed.sql         # locations, connections, items, Player One
+│   ├── 03_functions.sql    # gameplay functions (stored procedures)
+│   └── 04_triggers.sql     # logging and validation triggers
+└── gameplay_demo.sql       # full speed run in SQL
+app/
+├── app.py                  # Flask API
+├── templates/index.html    # terminal UI
+├── static/                 # styles and client-side command parser
+└── Dockerfile
+sql/                        # original SQL Server (T-SQL) v1.0 scripts
+images/                     # data models, ERDs and game map
 ```
 
 ---
 
 ## Getting Started
 
-1. Execute `01_build_database.sql` to create the database schema.
-2. Execute `02_gameplay.sql` to populate the database and demonstrate gameplay.
+See [Quick Start](#quick-start) to play in the browser.
+
+To play directly in SQL, open a psql session against the running database:
+
+```bash
+docker compose exec db psql -U starship -d starship_command
+```
+
+Or run the full speed run script:
+
+```bash
+docker compose exec -T db psql -U starship -d starship_command < db/gameplay_demo.sql
+```
+
+The original SQL Server version can still be built by running `sql/starship_command_build_script.sql` and then `sql/starship_command_gameplay.sql` in SSMS or Azure Data Studio.
 
 ---
 
 ## Gameplay
 
-After the database build script has been executed, players interact with **Starship Command** through stored procedures that control movement, exploration, item collection, and mission completion.
-
 The game begins with the player stranded on an alien planet after a spacecraft crash. The objective is to explore the surrounding area, recover the four missing components required to repair the ship, and return to the crash site to relaunch the spacecraft.
 
-### Starting the Game
+### Playing in the Browser
 
-The build script creates an initial player record:
+Enter a callsign to start.  Entering the same callsign later resumes that commander's mission.
+
+| Command | Action |
+|---|---|
+| `look` (`l`) | Describe your surroundings |
+| `go <direction>` | Move: north, south, east, west, forward, back, left, right |
+| `n` `s` `e` `w` `f` `b` | Direction shortcuts; a bare direction such as `left` also works |
+| `take <item>` | Pick up an item (partial names work) |
+| `inventory` (`i`) | List what you are carrying |
+| `launch` | Repair and relaunch the ship at the Crash Site |
+| `log` | Show your recent actions |
+| `restart` | Start the mission over |
+
+The side panel shows exits, nearby items, your cargo hold and the live action log, and its buttons issue the same commands.
+
+### Playing in SQL
+
+The seed script creates an initial player, `Player One`, with `player_id = 1`.  New players can be created with `SELECT usp_create_player('Ripley');`.
+
+To view the player's current location, items and exits:
 
 ```sql
-@player_id = 1
+SELECT jsonb_pretty(usp_look_around(1));
 ```
-
-This player ID is used throughout gameplay commands.
-
-### Exploring the World
-
-To view the player's current location and available actions:
-
-```sql
-EXEC usp_lookAround @player_id = 1;
-```
-
-The player begins at the spacecraft crash site and must explore connected locations to discover resources and mission-critical items.
-
-### Moving Between Locations
 
 Players navigate the game world using directional commands:
 
 ```sql
-EXEC usp_movePlayer 
-    @player_id = 1,
-    @direction = 'east';
+SELECT usp_move_player(1, 'east') ->> 'message';
 ```
 
-After moving, players can run `usp_lookAround` again to view their new location, description, and any available items.
-
-### Collecting Items
-
-When a required component is discovered, players can add it to their inventory:
+When a required component is discovered, players can add it to their inventory.  Available item IDs are listed in `state.items` when an item is present at the current location:
 
 ```sql
-EXEC usp_pickUpItem 
-    @player_id = 1,
-    @item_id = <item_id>;
+SELECT usp_pick_up_item(1, <item_id>) ->> 'message';
 ```
-
-Available item IDs are returned by `usp_lookAround` when an item is present at the current location.
-
-### Completing the Mission
 
 Once all four required components have been collected, the player must return to the crash site and attempt to repair the spacecraft:
 
 ```sql
-EXEC usp_completeGame @player_id = 1;
+SELECT jsonb_pretty(usp_complete_game(1) - 'state');
 ```
 
-If all required items have been collected, the player successfully completes the mission and relaunches the starship. If items are missing, the procedure provides hints about the remaining components and where they can be found.
+If all required items have been collected, the player successfully completes the mission and relaunches the starship. If items are missing, the response lists each remaining component with a hint about where it can be found.
 
 ---
 
 ## Technologies
 
-* SQL
+* SQL (PostgreSQL 17, PL/pgSQL; original version in T-SQL for SQL Server)
 * Relational Database Design
 * Entity Relationship Modeling
 * Database Normalization
+* Python / Flask / psycopg
+* HTML, CSS and JavaScript
+* Docker Compose
 
 ---
 
@@ -314,8 +394,8 @@ Key lessons learned:
 
 Potential future improvements include:
 
-- Build a Flask-based web interface to replace terminal gameplay
-- Add user authentication and persistent player profiles
+- Add user authentication (callsigns are currently unprotected)
+- Use `locations.is_dark` and `items.is_usable` for new mechanics, such as needing a light source to search dark locations
 - Introduce randomized maps and item placement
 - Add game scoring and achievement tracking
 - Create analytics dashboards using player action logs

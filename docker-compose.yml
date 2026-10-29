@@ -1,0 +1,32 @@
+services:
+  db:
+    image: postgres:17
+    environment:
+      POSTGRES_DB: starship_command
+      POSTGRES_USER: starship
+      POSTGRES_PASSWORD: starship
+    volumes:
+      # scripts here run once, when the data volume is first created
+      - ./db/init:/docker-entrypoint-initdb.d:ro
+      - db-data:/var/lib/postgresql/data
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    healthcheck:
+      # -h forces TCP, which only comes up after the init scripts finish
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U starship -d starship_command"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  web:
+    build: ./app
+    environment:
+      DATABASE_URL: postgresql://starship:starship@db:5432/starship_command
+    ports:
+      - "${WEB_PORT:-8080}:5000"
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  db-data:

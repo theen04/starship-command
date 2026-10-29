@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Starship Command</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <h1>Starship Command</h1>
+      <div class="status">
+        <span id="callsign"></span>
+        <span class="pips" id="pips" aria-label="Components recovered"></span>
+        <button type="button" class="link" id="logout" hidden>Switch commander</button>
+      </div>
+    </header>
+
+    <main class="layout">
+      <section class="terminal" aria-label="Ship terminal">
+        <div id="output" class="output" role="log" aria-live="polite"></div>
+        <form id="prompt" class="prompt" autocomplete="off">
+          <label for="command" class="caret">&gt;</label>
+          <input id="command" type="text" spellcheck="false" autocapitalize="off"
+                 placeholder="type a command, or 'help'" disabled>
+        </form>
+      </section>
+
+      <aside class="panel">
+        <section class="card">
+          <h2>Location</h2>
+          <p class="loc-name" id="loc-name">—</p>
+          <p class="dim" id="loc-desc"></p>
+        </section>
+
+        <section class="card">
+          <h2>Exits</h2>
+          <div class="buttons" id="exits"></div>
+        </section>
+
+        <section class="card">
+          <h2>Nearby</h2>
+          <ul class="list" id="items"></ul>
+        </section>
+
+        <section class="card">
+          <h2>Cargo hold</h2>
+          <ul class="list" id="inventory"></ul>
+        </section>
+
+        <section class="card buttons">
+          <button type="button" data-cmd="look">Look</button>
+          <button type="button" data-cmd="inventory">Inventory</button>
+          <button type="button" data-cmd="launch" id="launch">Launch</button>
+          <button type="button" data-cmd="restart">Restart</button>
+        </section>
+
+        <section class="card">
+          <h2>Action log</h2>
+          <ol class="log" id="log"></ol>
+        </section>
+      </aside>
+    </main>
+  </div>
+
+  <dialog id="login">
+    <form id="login-form" method="dialog">
+      <h2>Starship Command</h2>
+      <p class="dim">Your ship has crash-landed on an uncharted alien world.
+        Enter a callsign to begin, or reuse one to resume your mission.</p>
+      <label for="username">Callsign</label>
+      <input id="username" name="username" maxlength="50" required autocomplete="off" spellcheck="false">
+      <p class="error" id="login-error" role="alert"></p>
+      <button type="submit">Begin mission</button>
+    </form>
+  </dialog>
+
+  <script src="{{ url_for('static', filename='game.js') }}"></script>
+</body>
+</html>

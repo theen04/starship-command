@@ -206,3 +206,8 @@ EXEC usp_completeGame @player_id = 1
 
 /*Review action_log to audit each action the player took*/
 SELECT * FROM action_log ORDER BY action_time DESC
+
+
+
+
+
